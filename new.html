@@ -1,0 +1,1599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Temple Relic: 3D Endless Odyssey</title>
+  <style>
+    :root {
+      --gold: #f39c12;
+      --gold-glow: rgba(243, 156, 18, 0.6);
+      --dark: #080c10;
+      --hud-bg: rgba(14, 21, 30, 0.75);
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--dark);
+      font-family: 'Cinzel', 'Trajan Pro', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, serif;
+    }
+    #gameCanvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      z-index: 1;
+    }
+    /* HUD Layer */
+    #hud {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      padding: 24px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      z-index: 10;
+      pointer-events: none;
+    }
+    .hud-card {
+      background: var(--hud-bg);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(243, 156, 18, 0.3);
+      padding: 10px 20px;
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 0 12px rgba(243, 156, 18, 0.1);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .hud-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: #aaa;
+    }
+    .hud-val {
+      font-size: 26px;
+      font-weight: 800;
+      color: #fff;
+      text-shadow: 0 0 10px var(--gold-glow);
+    }
+    .gold-accent {
+      color: var(--gold);
+    }
+    /* Fullscreen Screen Menus */
+    .overlay-screen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(circle at center, rgba(14, 21, 30, 0.85) 0%, rgba(5, 8, 12, 0.98) 100%);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 20;
+      transition: opacity 0.35s ease;
+      color: #fff;
+      padding: 24px;
+      text-align: center;
+    }
+    .overlay-screen.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    .title-banner {
+      font-size: clamp(34px, 6vw, 64px);
+      font-weight: 900;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      background: linear-gradient(180deg, #fff 0%, #f39c12 70%, #b7770d 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 6px 16px rgba(243, 156, 18, 0.4));
+      margin-bottom: 12px;
+    }
+    .tagline {
+      font-size: clamp(14px, 2vw, 18px);
+      color: #bbb;
+      max-width: 520px;
+      margin-bottom: 36px;
+      line-height: 1.6;
+    }
+    .action-btn {
+      padding: 16px 48px;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      background: linear-gradient(135deg, #f39c12, #d35400);
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      border-radius: 40px;
+      cursor: pointer;
+      box-shadow: 0 10px 30px rgba(211, 84, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.5);
+      transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .action-btn:hover {
+      transform: translateY(-2px) scale(1.03);
+      box-shadow: 0 14px 36px rgba(211, 84, 0, 0.6);
+    }
+    .action-btn:active {
+      transform: translateY(2px) scale(0.98);
+    }
+    .instruction-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 14px;
+      max-width: 500px;
+      width: 100%;
+      margin-top: 36px;
+    }
+    .instruction-card {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 12px 8px;
+      border-radius: 10px;
+    }
+    .key-badge {
+      display: inline-block;
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 6px;
+      padding: 3px 8px;
+      font-size: 12px;
+      font-weight: bold;
+      color: var(--gold);
+      margin-bottom: 6px;
+    }
+    .inst-text {
+      font-size: 12px;
+      color: #999;
+    }
+  </style>
+  <!-- Three.js CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+  <!-- In-Game HUD -->
+  <div id="hud">
+    <div class="hud-card">
+      <span class="hud-title">Ancient Gold</span>
+      <span class="hud-val gold-accent" id="coinCounter">0</span>
+    </div>
+    <div class="hud-card" style="align-items: flex-end;">
+      <span class="hud-title">Expedition Depth</span>
+      <span class="hud-val"><span id="distCounter">0</span> <span style="font-size:14px;color:#aaa;">M</span></span>
+    </div>
+  </div>
+
+  <!-- Start Screen -->
+  <div class="overlay-screen" id="startScreen">
+    <h1 class="title-banner">Temple Relic</h1>
+    <p class="tagline">Escape the cursed subterranean vault. Jump collapsing fissures, slide under iron portcullises, and gather royal artifacts.</p>
+    <button class="action-btn" id="btnPlay">Enter Ruin</button>
+    <div class="instruction-grid">
+      <div class="instruction-card">
+        <span class="key-badge">A / D / ⬅️ ➡️</span>
+        <div class="inst-text">Switch Lanes</div>
+      </div>
+      <div class="instruction-card">
+        <span class="key-badge">W / ⬆️ / SPACE</span>
+        <div class="inst-text">Vault / Jump</div>
+      </div>
+      <div class="instruction-card">
+        <span class="key-badge">S / ⬇️</span>
+        <div class="inst-text">Slide & Duck</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Game Over Screen -->
+  <div class="overlay-screen hidden" id="gameOverScreen">
+    <h1 class="title-banner" style="background: linear-gradient(180deg, #ff7675, #d63031); -webkit-background-clip:text;">Fate Sealed</h1>
+    <p class="tagline" id="deathSummary">The ruins claimed your soul.</p>
+    <button class="action-btn" id="btnRestart">Try Once More</button>
+  </div>
+
+  <canvas id="gameCanvas"></canvas>
+
+  <script>
+  /* =========================================================================
+     AUDIO SYNTHESIS ENGINE (Zero external assets; realistic acoustics)
+     ========================================================================= */
+  class SoundEngine {
+    constructor() {
+      this.ctx = null;
+    }
+    init() {
+      if (!this.ctx) {
+        this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+    }
+    // Realistic multi-layered stone footstep
+    playFootstep() {
+      if (!this.ctx) return;
+      const t = this.ctx.currentTime;
+      // White noise gravel crunch
+      const bufferSize = this.ctx.sampleRate * 0.05;
+      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+
+      const noise = this.ctx.createBufferSource();
+      noise.buffer = buffer;
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = "bandpass";
+      filter.frequency.setValueAtTime(600, t);
+      filter.Q.setValueAtTime(3.0, t);
+
+      const gain = this.ctx.createGain();
+      gain.gain.setValueAtTime(0.06, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.ctx.destination);
+      noise.start(t);
+
+      // Low heel thud
+      const osc = this.ctx.createOscillator();
+      const oscGain = this.ctx.createGain();
+      osc.frequency.setValueAtTime(80, t);
+      osc.frequency.exponentialRampToValueAtTime(30, t + 0.04);
+      oscGain.gain.setValueAtTime(0.15, t);
+      oscGain.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+      osc.connect(oscGain);
+      oscGain.connect(this.ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.04);
+    }
+    // Coin chime with metallic resonance
+    playCoin() {
+      if (!this.ctx) return;
+      const t = this.ctx.currentTime;
+      [1760, 2637].forEach((freq, i) => {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(freq, t + i * 0.04);
+        gain.gain.setValueAtTime(0.12, t + i * 0.04);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.04 + 0.4);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(t + i * 0.04);
+        osc.stop(t + i * 0.04 + 0.4);
+      });
+    }
+    // Air whoosh for jump
+    playJump() {
+      if (!this.ctx) return;
+      const t = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(140, t);
+      osc.frequency.exponentialRampToValueAtTime(420, t + 0.2);
+      gain.gain.setValueAtTime(0.18, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.22);
+    }
+    // Stone slide friction
+    playSlide() {
+      if (!this.ctx) return;
+      const t = this.ctx.currentTime;
+      const bufferSize = this.ctx.sampleRate * 0.4;
+      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+
+      const noise = this.ctx.createBufferSource();
+      noise.buffer = buffer;
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = "lowpass";
+      filter.frequency.setValueAtTime(800, t);
+      filter.frequency.linearRampToValueAtTime(300, t + 0.35);
+
+      const gain = this.ctx.createGain();
+      gain.gain.setValueAtTime(0.15, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.38);
+
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.ctx.destination);
+      noise.start(t);
+    }
+    // Deep shattering crash impact
+    playCrash() {
+      if (!this.ctx) return;
+      const t = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(120, t);
+      osc.frequency.exponentialRampToValueAtTime(20, t + 0.4);
+      gain.gain.setValueAtTime(0.35, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.5);
+    }
+  }
+
+  /* =========================================================================
+     GLOBAL GAME STATE & INPUT DISPATCHER
+     ========================================================================= */
+  const GAME_STATE = {
+    MENU: 0,
+    RUNNING: 1,
+    GAMEOVER: 2
+  };
+
+  const Engine = {
+    state: GAME_STATE.MENU,
+    sound: new SoundEngine(),
+    score: 0,
+    coins: 0,
+    speed: 28,
+    laneWidth: 3.2,
+    currentLane: 1, // 0: Left, 1: Center, 2: Right
+    targetX: 0,
+    isJumping: false,
+    jumpVelocity: 0,
+    gravity: -52,
+    isSliding: false,
+    slideTimeRemaining: 0,
+    stepTimer: 0,
+
+    init() {
+      this.bindInputs();
+      document.getElementById("btnPlay").onclick = () => this.startGame();
+      document.getElementById("btnRestart").onclick = () => this.startGame();
+    },
+
+    bindInputs() {
+      window.addEventListener("keydown", (e) => {
+        if (this.state !== GAME_STATE.RUNNING) return;
+        switch (e.code) {
+          case "KeyA":
+          case "ArrowLeft":
+            if (this.currentLane > 0) {
+              this.currentLane--;
+              this.targetX = (this.currentLane - 1) * this.laneWidth;
+            }
+            break;
+          case "KeyD":
+          case "ArrowRight":
+            if (this.currentLane < 2) {
+              this.currentLane++;
+              this.targetX = (this.currentLane - 1) * this.laneWidth;
+            }
+            break;
+          case "KeyW":
+          case "ArrowUp":
+          case "Space":
+            if (!this.isJumping && !this.isSliding) {
+              this.isJumping = true;
+              this.jumpVelocity = 17.5;
+              this.sound.playJump();
+            }
+            break;
+          case "KeyS":
+          case "ArrowDown":
+            if (!this.isSliding) {
+              this.isSliding = true;
+              this.slideTimeRemaining = 0.65;
+              this.sound.playSlide();
+              if (this.isJumping) this.jumpVelocity = -22; // Quick drop
+            }
+            break;
+        }
+      });
+    },
+
+    startGame() {
+      this.sound.init();
+      this.state = GAME_STATE.RUNNING;
+      this.score = 0;
+      this.coins = 0;
+      this.speed = 28;
+      this.currentLane = 1;
+      this.targetX = 0;
+      this.isJumping = false;
+      this.isSliding = false;
+
+      document.getElementById("startScreen").classList.add("hidden");
+      document.getElementById("gameOverScreen").classList.add("hidden");
+      document.getElementById("coinCounter").innerText = "0";
+      document.getElementById("distCounter").innerText = "0";
+
+      if (window.World && window.World.reset) {
+        window.World.reset();
+      }
+    },
+
+    triggerGameOver() {
+      this.state = GAME_STATE.GAMEOVER;
+      this.sound.playCrash();
+      document.getElementById("deathSummary").innerHTML = 
+        `You fell inside the catacombs after traversing <strong>${Math.floor(this.score)} meters</strong> and pillaging <strong>${this.coins} sacred coins</strong>.`;
+      document.getElementById("gameOverScreen").classList.remove("hidden");
+    }
+  };
+
+  window.addEventListener("DOMContentLoaded", () => Engine.init());
+  </script>
+<script>
+  /* =========================================================================
+     PART 2: PROCEDURAL TEXTURE SYNTHESIS & MATERIAL PIPELINE
+     Generates realistic PBR maps on HTML5 Canvases (no external image assets)
+     ========================================================================= */
+  const TextureFactory = {
+    // Generates ancient weathered temple stone tiles with moss & edge bevels
+    createCobblestone(width = 512, height = 512) {
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+
+      // Dark stone base
+      ctx.fillStyle = "#2c2a29";
+      ctx.fillRect(0, 0, width, height);
+
+      const rows = 8;
+      const cols = 4;
+      const tileH = height / rows;
+      const tileW = width / cols;
+
+      for (let r = 0; r < rows; r++) {
+        const offset = (r % 2) * (tileW / 2);
+        for (let c = -1; c <= cols; c++) {
+          const x = c * tileW + offset;
+          const y = r * tileH;
+
+          // Per-tile noise variations
+          const shade = 45 + Math.floor(Math.random() * 25);
+          ctx.fillStyle = `rgb(${shade + 5}, ${shade}, ${shade - 5})`;
+          ctx.fillRect(x + 3, y + 3, tileW - 6, tileH - 6);
+
+          // Micro-grit speckles
+          for (let p = 0; p < 80; p++) {
+            const px = x + Math.random() * tileW;
+            const py = y + Math.random() * tileH;
+            const speckle = Math.random() > 0.5 ? 200 : 20;
+            ctx.fillStyle = `rgba(${speckle}, ${speckle}, ${speckle}, 0.08)`;
+            ctx.fillRect(px, py, 2, 2);
+          }
+
+          // Moss overlay in crevices
+          if (Math.random() > 0.45) {
+            ctx.fillStyle = "rgba(40, 70, 35, 0.45)";
+            ctx.beginPath();
+            ctx.arc(x + 6, y + 6, 8 + Math.random() * 12, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      }
+
+      // Deep grout mortar lines
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = "#121110";
+      for (let r = 0; r <= rows; r++) {
+        ctx.beginPath();
+        ctx.moveTo(0, r * tileH);
+        ctx.lineTo(width, r * tileH);
+        ctx.stroke();
+      }
+      for (let r = 0; r < rows; r++) {
+        const offset = (r % 2) * (tileW / 2);
+        for (let c = -1; c <= cols; c++) {
+          ctx.beginPath();
+          ctx.moveTo(c * tileW + offset, r * tileH);
+          ctx.lineTo(c * tileW + offset, (r + 1) * tileH);
+          ctx.stroke();
+        }
+      }
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      return texture;
+    },
+
+    // Generates matching normal/bump heightmap for the cobblestones
+    createBumpMap(width = 512, height = 512) {
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+
+      ctx.fillStyle = "#808080";
+      ctx.fillRect(0, 0, width, height);
+
+      const rows = 8;
+      const cols = 4;
+      const tileH = height / rows;
+      const tileW = width / cols;
+
+      for (let r = 0; r < rows; r++) {
+        const offset = (r % 2) * (tileW / 2);
+        for (let c = -1; c <= cols; c++) {
+          const x = c * tileW + offset;
+          const y = r * tileH;
+          const radGrad = ctx.createRadialGradient(
+            x + tileW / 2, y + tileH / 2, 4,
+            x + tileW / 2, y + tileH / 2, tileW / 1.8
+          );
+          radGrad.addColorStop(0, "rgba(255, 255, 255, 0.4)");
+          radGrad.addColorStop(1, "rgba(0, 0, 0, 0.6)");
+          ctx.fillStyle = radGrad;
+          ctx.fillRect(x + 2, y + 2, tileW - 4, tileH - 4);
+        }
+      }
+
+      const bump = new THREE.CanvasTexture(canvas);
+      bump.wrapS = THREE.RepeatWrapping;
+      bump.wrapT = THREE.RepeatWrapping;
+      return bump;
+    },
+
+    // Ornate Inca/Aztec ritual coin texture
+    createCoinTexture(size = 256) {
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+
+      // Polished gold foundation
+      const grad = ctx.createRadialGradient(size / 2, size / 2, 20, size / 2, size / 2, size / 2);
+      grad.addColorStop(0, "#ffe066");
+      grad.addColorStop(0.7, "#f39c12");
+      grad.addColorStop(1, "#b7770d");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, size, size);
+
+      // Outer rim relief
+      ctx.lineWidth = 14;
+      ctx.strokeStyle = "#7d4e04";
+      ctx.strokeRect(8, 8, size - 16, size - 16);
+
+      // Engraved mythical skull / mask glyph
+      ctx.fillStyle = "#613b00";
+      ctx.beginPath();
+      ctx.arc(size / 2, size / 2 - 12, 38, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Eye sockets
+      ctx.fillStyle = "#ffe066";
+      ctx.beginPath();
+      ctx.arc(size / 2 - 14, size / 2 - 16, 8, 0, Math.PI * 2);
+      ctx.arc(size / 2 + 14, size / 2 - 16, 8, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Fangs/jaw
+      ctx.fillStyle = "#613b00";
+      ctx.fillRect(size / 2 - 20, size / 2 + 30, 40, 18);
+
+      const texture = new THREE.CanvasTexture(canvas);
+      return texture;
+    }
+  };
+
+  /* =========================================================================
+     PBR MATERIALS LIBRARY
+     ========================================================================= */
+  const Materials = {
+    init() {
+      const stoneAlbedo = TextureFactory.createCobblestone();
+      stoneAlbedo.repeat.set(1, 4);
+      const stoneBump = TextureFactory.createBumpMap();
+      stoneBump.repeat.set(1, 4);
+
+      // Main pathway stone
+      this.floor = new THREE.MeshStandardMaterial({
+        map: stoneAlbedo,
+        bumpMap: stoneBump,
+        bumpScale: 0.12,
+        roughness: 0.82,
+        metalness: 0.15
+      });
+
+      // Dark temple walls & monoliths
+      this.ruinStone = new THREE.MeshStandardMaterial({
+        color: 0x22252a,
+        roughness: 0.9,
+        metalness: 0.1,
+        bumpScale: 0.08
+      });
+
+      // Wooden spikes & log barriers
+      this.darkWood = new THREE.MeshStandardMaterial({
+        color: 0x4a2e18,
+        roughness: 0.7,
+        metalness: 0.05
+      });
+
+      // Iron portcullis spikes
+      this.ironBar = new THREE.MeshStandardMaterial({
+        color: 0x1f2421,
+        roughness: 0.35,
+        metalness: 0.85
+      });
+
+      // Relic Coin Gold
+      this.goldCoin = new THREE.MeshStandardMaterial({
+        map: TextureFactory.createCoinTexture(),
+        roughness: 0.28,
+        metalness: 0.92,
+        emissive: 0x543803,
+        emissiveIntensity: 0.25
+      });
+
+      // Fire Brazier Bronze
+      this.brazier = new THREE.MeshStandardMaterial({
+        color: 0x472f17,
+        roughness: 0.5,
+        metalness: 0.8
+      });
+    }
+  };
+
+  /* =========================================================================
+     PARTICLE & LIGHTING SYSTEM (Volumetric subterranean dungeon ambiance)
+     ========================================================================= */
+  class ParticleManager {
+    constructor(scene) {
+      this.scene = scene;
+      this.emberCount = 90;
+      this.initEmbers();
+    }
+
+    initEmbers() {
+      const geo = new THREE.BufferGeometry();
+      const positions = new Float32Array(this.emberCount * 3);
+      const scales = new Float32Array(this.emberCount);
+
+      for (let i = 0; i < this.emberCount; i++) {
+        positions[i * 3 + 0] = (Math.random() - 0.5) * 16;
+        positions[i * 3 + 1] = Math.random() * 8 + 0.5;
+        positions[i * 3 + 2] = -Math.random() * 60;
+        scales[i] = Math.random() * 0.2 + 0.1;
+      }
+
+      geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      geo.setAttribute("scale", new THREE.BufferAttribute(scales, 1));
+
+      const mat = new THREE.PointsMaterial({
+        color: 0xffaa22,
+        size: 0.22,
+        transparent: true,
+        opacity: 0.8,
+        blending: THREE.AdditiveBlending
+      });
+
+      this.emberSystem = new THREE.Points(geo, mat);
+      this.scene.add(this.emberSystem);
+    }
+
+    update(delta, playerZ) {
+      const positions = this.emberSystem.geometry.attributes.position.array;
+      for (let i = 0; i < this.emberCount; i++) {
+        positions[i * 3 + 1] += delta * (0.8 + Math.random() * 0.4); // float up
+        positions[i * 3 + 0] += Math.sin(positions[i * 3 + 1] * 2) * delta * 0.3;
+
+        // Reset particles that float out of frame or fall behind player
+        if (positions[i * 3 + 1] > 8 || positions[i * 3 + 2] > playerZ + 5) {
+          positions[i * 3 + 1] = 0.5;
+          positions[i * 3 + 2] = playerZ - Math.random() * 55;
+        }
+      }
+      this.emberSystem.geometry.attributes.position.needsUpdate = true;
+    }
+  }
+  </script>
+<script>
+  /* =========================================================================
+     PART 3: ARTICULATED PROCEDURAL CHARACTER RIG & SKELETAL CONTROLLER
+     A multi-joint explorer model with real-time procedural kinematic cycles
+     ========================================================================= */
+  class RunnerCharacter {
+    constructor(scene) {
+      this.scene = scene;
+      this.root = new THREE.Group();
+      this.animTime = 0;
+
+      // Skeletal Joint References
+      this.limbs = {};
+      this.buildSkeleton();
+      this.scene.add(this.root);
+    }
+
+    buildSkeleton() {
+      // Materials
+      const skinMat = new THREE.MeshStandardMaterial({
+        color: 0xd2986d,
+        roughness: 0.65,
+        metalness: 0.05
+      });
+      const shirtMat = new THREE.MeshStandardMaterial({
+        color: 0x8a7051, // Desert khaki adventurer tunic
+        roughness: 0.8,
+        metalness: 0.1
+      });
+      const pantsMat = new THREE.MeshStandardMaterial({
+        color: 0x3d3126, // Worn leather boots & cargo trousers
+        roughness: 0.75,
+        metalness: 0.15
+      });
+      const gearMat = new THREE.MeshStandardMaterial({
+        color: 0x1a1614, // Straps & holster harness
+        roughness: 0.5,
+        metalness: 0.4
+      });
+
+      // 1. Pelvis / Root Pivot
+      this.pelvis = new THREE.Group();
+      this.pelvis.position.y = 1.35;
+      this.root.add(this.pelvis);
+
+      // 2. Torso & Upper Body
+      const torsoGeo = new THREE.BoxGeometry(0.72, 0.75, 0.42);
+      this.torso = new THREE.Mesh(torsoGeo, shirtMat);
+      this.torso.castShadow = true;
+      this.torso.position.y = 0.45;
+      this.pelvis.add(this.torso);
+
+      // Backpack / Expedition Pack
+      const packGeo = new THREE.BoxGeometry(0.55, 0.55, 0.3);
+      const pack = new THREE.Mesh(packGeo, gearMat);
+      pack.position.set(0, 0.05, -0.3);
+      pack.castShadow = true;
+      this.torso.add(pack);
+
+      // 3. Neck & Head
+      const headGroup = new THREE.Group();
+      headGroup.position.y = 0.55;
+      this.torso.add(headGroup);
+
+      const headGeo = new THREE.SphereGeometry(0.24, 16, 16);
+      const head = new THREE.Mesh(headGeo, skinMat);
+      head.castShadow = true;
+      headGroup.add(head);
+
+      // Adventurer Explorer Hat (Wide-brim fedora)
+      const brimGeo = new THREE.CylinderGeometry(0.48, 0.48, 0.04, 16);
+      const hatCrownGeo = new THREE.CylinderGeometry(0.24, 0.28, 0.22, 16);
+      const brim = new THREE.Mesh(brimGeo, pantsMat);
+      const crown = new THREE.Mesh(hatCrownGeo, pantsMat);
+      brim.position.y = 0.16;
+      crown.position.y = 0.28;
+      headGroup.add(brim);
+      headGroup.add(crown);
+      this.limbs.head = headGroup;
+
+      // 4. Arms & Shoulders
+      this.limbs.leftArm = this.createArm(-0.48, shirtMat, skinMat);
+      this.limbs.rightArm = this.createArm(0.48, shirtMat, skinMat);
+      this.torso.add(this.limbs.leftArm.shoulder);
+      this.torso.add(this.limbs.rightArm.shoulder);
+
+      // 5. Legs & Feet
+      this.limbs.leftLeg = this.createLeg(-0.22, pantsMat, gearMat);
+      this.limbs.rightLeg = this.createLeg(0.22, pantsMat, gearMat);
+      this.pelvis.add(this.limbs.leftLeg.hip);
+      this.pelvis.add(this.limbs.rightLeg.hip);
+    }
+
+    createArm(xOffset, sleeveMat, skinMat) {
+      const shoulder = new THREE.Group();
+      shoulder.position.set(xOffset, 0.32, 0);
+
+      // Upper arm
+      const upperGeo = new THREE.BoxGeometry(0.2, 0.42, 0.2);
+      const upperArm = new THREE.Mesh(upperGeo, sleeveMat);
+      upperArm.position.y = -0.18;
+      upperArm.castShadow = true;
+      shoulder.add(upperArm);
+
+      // Elbow joint
+      const elbow = new THREE.Group();
+      elbow.position.y = -0.38;
+      shoulder.add(elbow);
+
+      // Forearm & Hand
+      const foreGeo = new THREE.BoxGeometry(0.18, 0.4, 0.18);
+      const foreArm = new THREE.Mesh(foreGeo, skinMat);
+      foreArm.position.y = -0.18;
+      foreArm.castShadow = true;
+      elbow.add(foreArm);
+
+      return { shoulder, elbow };
+    }
+
+    createLeg(xOffset, pantsMat, bootMat) {
+      const hip = new THREE.Group();
+      hip.position.set(xOffset, -0.05, 0);
+
+      // Thigh
+      const thighGeo = new THREE.BoxGeometry(0.24, 0.52, 0.24);
+      const thigh = new THREE.Mesh(thighGeo, pantsMat);
+      thigh.position.y = -0.25;
+      thigh.castShadow = true;
+      hip.add(thigh);
+
+      // Knee joint
+      const knee = new THREE.Group();
+      knee.position.y = -0.52;
+      hip.add(knee);
+
+      // Shin / Boot
+      const shinGeo = new THREE.BoxGeometry(0.22, 0.5, 0.26);
+      const shin = new THREE.Mesh(shinGeo, bootMat);
+      shin.position.set(0, -0.22, 0.02);
+      shin.castShadow = true;
+      knee.add(shin);
+
+      return { hip, knee };
+    }
+
+    // Kinematic Animation Engine
+    update(delta, speed, state) {
+      // 1. Sliding State (Squash rig, drop center of mass, tilt back)
+      if (state.isSliding) {
+        this.pelvis.position.y = 0.45;
+        this.pelvis.rotation.x = -Math.PI / 3;
+        this.limbs.leftLeg.hip.rotation.x = -0.4;
+        this.limbs.rightLeg.hip.rotation.x = -0.4;
+        this.limbs.leftLeg.knee.rotation.x = 1.2;
+        this.limbs.rightLeg.knee.rotation.x = 1.2;
+        this.limbs.leftArm.shoulder.rotation.x = 0.5;
+        this.limbs.rightArm.shoulder.rotation.x = 0.5;
+        return;
+      }
+
+      // 2. Jumping State (Airborne vault pose)
+      if (state.isJumping) {
+        this.pelvis.position.y = 1.35;
+        this.pelvis.rotation.x = 0.15;
+        // Legs tucked backwards
+        this.limbs.leftLeg.hip.rotation.x = 0.7;
+        this.limbs.leftLeg.knee.rotation.x = -1.2;
+        this.limbs.rightLeg.hip.rotation.x = -0.8;
+        this.limbs.rightLeg.knee.rotation.x = -0.4;
+        // Arms extended upward for balance
+        this.limbs.leftArm.shoulder.rotation.x = -2.2;
+        this.limbs.rightArm.shoulder.rotation.x = -1.8;
+        return;
+      }
+
+      // 3. Normal High-Speed Run Cycle
+      const runFrequency = speed * 0.48;
+      this.animTime += delta * runFrequency;
+
+      const cycle = this.animTime;
+      const legStride = 0.85;
+      const armStride = 0.95;
+
+      // Hip pitch alternation
+      this.limbs.leftLeg.hip.rotation.x = Math.sin(cycle) * legStride;
+      this.limbs.rightLeg.hip.rotation.x = -Math.sin(cycle) * legStride;
+
+      // Dynamic Knee bending (bends sharply on back-swing, stays straight on plant)
+      this.limbs.leftLeg.knee.rotation.x = Math.max(0, -Math.sin(cycle + 0.4) * 1.3);
+      this.limbs.rightLeg.knee.rotation.x = Math.max(0, Math.sin(cycle + 0.4) * 1.3);
+
+      // Arm swing counter-balances opposite leg
+      this.limbs.leftArm.shoulder.rotation.x = -Math.sin(cycle) * armStride;
+      this.limbs.rightArm.shoulder.rotation.x = Math.sin(cycle) * armStride;
+      this.limbs.leftArm.elbow.rotation.x = -0.5 - Math.abs(Math.sin(cycle)) * 0.5;
+      this.limbs.rightArm.elbow.rotation.x = -0.5 - Math.abs(Math.cos(cycle)) * 0.5;
+
+      // Realistic Vertical Pelvic Bob & Torso Sway
+      this.pelvis.position.y = 1.35 + Math.abs(Math.sin(cycle * 2)) * 0.12;
+      this.torso.rotation.y = Math.sin(cycle) * 0.1;
+      this.torso.rotation.z = Math.sin(cycle) * 0.05;
+      this.pelvis.rotation.x = 0.18; // Slight forward lean at top speed
+    }
+  }
+  </script>
+<script>
+  /* =========================================================================
+     PART 4: INFINITE MODULAR TRACK & OBSTACLE GENERATOR
+     ========================================================================= */
+  class TrackManager {
+    constructor(scene) {
+      this.scene = scene;
+      this.chunkLength = 24;
+      this.visibleChunks = 8;
+      this.chunks = [];
+      this.obstacles = [];
+      this.coins = [];
+      this.torches = [];
+      this.nextSpawnZ = 0;
+
+      this.lanes = [-Engine.laneWidth, 0, Engine.laneWidth];
+
+      // Geometries reused across all chunks to conserve draw calls
+      this.tileGeo = new THREE.BoxGeometry(10.5, 0.8, this.chunkLength);
+      this.wallGeo = new THREE.BoxGeometry(1.2, 5.5, this.chunkLength);
+      this.pillarGeo = new THREE.BoxGeometry(1.6, 6.2, 1.6);
+      this.coinGeo = new THREE.CylinderGeometry(0.42, 0.42, 0.1, 18);
+      this.coinGeo.rotateX(Math.PI / 2);
+
+      this.initTrack();
+    }
+
+    initTrack() {
+      // Build initial track buffer stretching out in front of player
+      for (let i = 0; i < this.visibleChunks; i++) {
+        this.spawnChunk(this.nextSpawnZ, i < 2); // First 2 chunks remain obstacle-free
+        this.nextSpawnZ -= this.chunkLength;
+      }
+    }
+
+    spawnChunk(zPos, isSafeZone = false) {
+      const chunkGroup = new THREE.Group();
+      chunkGroup.position.z = zPos;
+
+      // 1. Cobblestone Floor
+      const floor = new THREE.Mesh(this.tileGeo, Materials.floor);
+      floor.position.y = -0.4;
+      floor.receiveShadow = true;
+      chunkGroup.add(floor);
+
+      // 2. Ruin Flanking Walls
+      const leftWall = new THREE.Mesh(this.wallGeo, Materials.ruinStone);
+      leftWall.position.set(-5.6, 2.3, 0);
+      leftWall.castShadow = true;
+      leftWall.receiveShadow = true;
+      chunkGroup.add(leftWall);
+
+      const rightWall = new THREE.Mesh(this.wallGeo, Materials.ruinStone);
+      rightWall.position.set(5.6, 2.3, 0);
+      rightWall.castShadow = true;
+      rightWall.receiveShadow = true;
+      chunkGroup.add(rightWall);
+
+      // 3. Ancient Monolith Pillars
+      [-this.chunkLength / 2, this.chunkLength / 2].forEach(pZ => {
+        const pLeft = new THREE.Mesh(this.pillarGeo, Materials.ruinStone);
+        pLeft.position.set(-5.1, 2.6, pZ);
+        pLeft.castShadow = true;
+        chunkGroup.add(pLeft);
+
+        const pRight = new THREE.Mesh(this.pillarGeo, Materials.ruinStone);
+        pRight.position.set(5.1, 2.6, pZ);
+        pRight.castShadow = true;
+        chunkGroup.add(pRight);
+      });
+
+      // 4. Fire Torch Sconces with point lights
+      const torchLeft = this.createTorch(-4.8, 2.4, 0);
+      const torchRight = this.createTorch(4.8, 2.4, 0);
+      chunkGroup.add(torchLeft.mesh);
+      chunkGroup.add(torchRight.mesh);
+      this.torches.push(torchLeft, torchRight);
+
+      this.scene.add(chunkGroup);
+      this.chunks.push(chunkGroup);
+
+      // 5. Track Hazards and Collectibles
+      if (!isSafeZone) {
+        this.populateChunkHazards(zPos);
+      }
+    }
+
+    createTorch(x, y, z) {
+      const mesh = new THREE.Group();
+      mesh.position.set(x, y, z);
+
+      // Bronze sconce
+      const bowl = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.3, 0.12, 0.4, 8),
+        Materials.brazier
+      );
+      mesh.add(bowl);
+
+      // Flame core
+      const flame = new THREE.Mesh(
+        new THREE.DodecahedronGeometry(0.18),
+        new THREE.MeshBasicMaterial({ color: 0xff7711 })
+      );
+      flame.position.y = 0.25;
+      mesh.add(flame);
+
+      // Dynamic light source
+      const light = new THREE.PointLight(0xff9922, 1.2, 14, 1.8);
+      light.position.y = 0.4;
+      mesh.add(light);
+
+      return { mesh, light, baseIntensity: 1.2 };
+    }
+
+    populateChunkHazards(zPos) {
+      const obstacleType = Math.random();
+
+      // Feature A: High Stone Portcullis (Requires Slide)
+      if (obstacleType < 0.35) {
+        const portcullis = new THREE.Group();
+        const arch = new THREE.Mesh(
+          new THREE.BoxGeometry(10.5, 2.2, 0.8),
+          Materials.ruinStone
+        );
+        arch.position.set(0, 3.2, 0);
+        arch.castShadow = true;
+        portcullis.add(arch);
+
+        // Hanging Spikes
+        for (let i = -4.2; i <= 4.2; i += 0.8) {
+          const spike = new THREE.Mesh(
+            new THREE.ConeGeometry(0.12, 0.9, 6),
+            Materials.ironBar
+          );
+          spike.rotation.x = Math.PI;
+          spike.position.set(i, 2.0, 0);
+          spike.castShadow = true;
+          portcullis.add(spike);
+        }
+
+        portcullis.position.set(0, 0, zPos);
+        portcullis.userData = {
+          type: "SLIDE_UNDER",
+          z: zPos,
+          hitBox: { minX: -5.0, maxX: 5.0, minY: 1.2, maxY: 3.5, depth: 1.0 }
+        };
+        this.scene.add(portcullis);
+        this.obstacles.push(portcullis);
+      }
+      // Feature B: Spiked Log Rollers (Requires Jump or Lane Change)
+      else if (obstacleType < 0.72) {
+        const laneIdx = Math.floor(Math.random() * 3);
+        const xPos = this.lanes[laneIdx];
+
+        const logGroup = new THREE.Group();
+        const log = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.35, 0.35, Engine.laneWidth * 0.92, 12),
+          Materials.darkWood
+        );
+        log.rotation.z = Math.PI / 2;
+        log.position.y = 0.4;
+        log.castShadow = true;
+        logGroup.add(log);
+
+        // Metal support posts
+        const postMat = Materials.ironBar;
+        const postL = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.8, 0.15), postMat);
+        postL.position.set(-Engine.laneWidth * 0.45, 0.4, 0);
+        const postR = postL.clone();
+        postR.position.x = Engine.laneWidth * 0.45;
+        logGroup.add(postL, postR);
+
+        logGroup.position.set(xPos, 0, zPos);
+        logGroup.userData = {
+          type: "JUMP_OVER",
+          lane: laneIdx,
+          z: zPos,
+          hitBox: { minX: xPos - 1.3, maxX: xPos + 1.3, minY: 0, maxY: 0.8, depth: 0.9 }
+        };
+        this.scene.add(logGroup);
+        this.obstacles.push(logGroup);
+      }
+
+      // Feature C: Arched Coin Clusters
+      const coinLane = Math.floor(Math.random() * 3);
+      const coinX = this.lanes[coinLane];
+      const coinCount = 5;
+
+      for (let c = 0; c < coinCount; c++) {
+        const coinMesh = new THREE.Mesh(this.coinGeo, Materials.goldCoin);
+        const relativeZ = zPos - (c * 2.2) + 4;
+        // Natural parabolic pickup arc
+        const arcY = 0.8 + Math.sin((c / (coinCount - 1)) * Math.PI) * 1.5;
+
+        coinMesh.position.set(coinX, arcY, relativeZ);
+        coinMesh.castShadow = true;
+        coinMesh.userData = { lane: coinLane, collected: false };
+
+        this.scene.add(coinMesh);
+        this.coins.push(coinMesh);
+      }
+    }
+
+    update(playerZ) {
+      // 1. Recycle track chunks that drop far behind player view
+      for (let i = this.chunks.length - 1; i >= 0; i--) {
+        const chunk = this.chunks[i];
+        if (chunk.position.z > playerZ + 28) {
+          this.scene.remove(chunk);
+          this.chunks.splice(i, 1);
+          this.spawnChunk(this.nextSpawnZ);
+          this.nextSpawnZ -= this.chunkLength;
+        }
+      }
+
+      // 2. Clean up passed obstacles
+      for (let i = this.obstacles.length - 1; i >= 0; i--) {
+        const obs = this.obstacles[i];
+        if (obs.position.z > playerZ + 15) {
+          this.scene.remove(obs);
+          this.obstacles.splice(i, 1);
+        }
+      }
+
+      // 3. Spin and clean up coin pickups
+      for (let i = this.coins.length - 1; i >= 0; i--) {
+        const coin = this.coins[i];
+        coin.rotation.z += 0.05; // Spin animation
+
+        if (coin.position.z > playerZ + 15 || coin.userData.collected) {
+          this.scene.remove(coin);
+          this.coins.splice(i, 1);
+        }
+      }
+
+      // 4. Torch Flicker Light Simulation
+      this.torches.forEach(t => {
+        t.light.intensity = t.baseIntensity + (Math.random() - 0.5) * 0.35;
+      });
+    }
+
+    reset() {
+      // Clear out scene entities
+      this.chunks.forEach(c => this.scene.remove(c));
+      this.obstacles.forEach(o => this.scene.remove(o));
+      this.coins.forEach(c => this.scene.remove(c));
+
+      this.chunks.length = 0;
+      this.obstacles.length = 0;
+      this.coins.length = 0;
+      this.torches.length = 0;
+      this.nextSpawnZ = 0;
+
+      this.initTrack();
+    }
+  }
+  </script>
+<script>
+  /* =========================================================================
+     PART 5: PHYSICS, CAMERA RIG, COLLISION DETECTION & MAIN LOOP
+     ========================================================================= */
+  class CameraController {
+    constructor(camera) {
+      this.camera = camera;
+      this.offset = new THREE.Vector3(0, 4.2, 7.8);
+      this.lookOffset = new THREE.Vector3(0, 1.8, -5.0);
+      this.currentX = 0;
+      this.shakeIntensity = 0;
+    }
+
+    triggerShake(amount = 0.4) {
+      this.shakeIntensity = amount;
+    }
+
+    update(delta, playerPos) {
+      // Spring damping on horizontal camera tracking
+      this.currentX += (playerPos.x - this.currentX) * 10 * delta;
+
+      // Calculate base camera position
+      this.camera.position.x = this.currentX * 0.45;
+      this.camera.position.y = playerPos.y * 0.35 + this.offset.y;
+      this.camera.position.z = playerPos.z + this.offset.z;
+
+      // Apply screen shake on impact
+      if (this.shakeIntensity > 0) {
+        this.camera.position.x += (Math.random() - 0.5) * this.shakeIntensity;
+        this.camera.position.y += (Math.random() - 0.5) * this.shakeIntensity;
+        this.shakeIntensity = Math.max(0, this.shakeIntensity - delta * 1.6);
+      }
+
+      // Dynamic look-at target ahead of the player
+      const lookTarget = new THREE.Vector3(
+        this.currentX * 0.7,
+        playerPos.y * 0.5 + this.lookOffset.y,
+        playerPos.z + this.lookOffset.z
+      );
+      this.camera.lookAt(lookTarget);
+    }
+  }
+
+  /* =========================================================================
+     GAME WORLD & ORCHESTRATOR
+     ========================================================================= */
+  const World = {
+    init() {
+      const canvas = document.getElementById("gameCanvas");
+
+      // Renderer setup with PBR tonemapping & soft shadows
+      this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
+      this.renderer.setSize(window.innerWidth, window.innerHeight);
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      this.renderer.shadowMap.enabled = true;
+      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      this.renderer.toneMappingExposure = 1.1;
+
+      // Subterranean temple atmosphere
+      this.scene = new THREE.Scene();
+      this.scene.background = new THREE.Color(0x0a0e14);
+      this.scene.fog = new THREE.FogExp2(0x0a0e14, 0.024);
+
+      // Camera & Camera Rig
+      this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 140);
+      this.cameraController = new CameraController(this.camera);
+
+      // Ambient & Directional Lighting
+      const ambient = new THREE.AmbientLight(0x222a35, 1.2);
+      this.scene.add(ambient);
+
+      this.sunLight = new THREE.DirectionalLight(0xffecd0, 1.4);
+      this.sunLight.position.set(12, 30, 20);
+      this.sunLight.castShadow = true;
+      this.sunLight.shadow.mapSize.width = 1024;
+      this.sunLight.shadow.mapSize.height = 1024;
+      this.sunLight.shadow.camera.near = 1;
+      this.sunLight.shadow.camera.far = 100;
+      this.sunLight.shadow.camera.left = -16;
+      this.sunLight.shadow.camera.right = 16;
+      this.sunLight.shadow.camera.top = 16;
+      this.sunLight.shadow.camera.bottom = -16;
+      this.scene.add(this.sunLight);
+
+      // Initialize Sub-systems
+      Materials.init();
+      this.particles = new ParticleManager(this.scene);
+      this.character = new RunnerCharacter(this.scene);
+      this.track = new TrackManager(this.scene);
+
+      // Footstep tracking
+      this.stepAccumulator = 0;
+      this.lastTime = performance.now();
+
+      // Window resize listener
+      window.addEventListener("resize", () => {
+        this.camera.aspect = window.innerWidth / window.innerHeight;
+        this.camera.updateProjectionMatrix();
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+
+      this.animate = this.animate.bind(this);
+      requestAnimationFrame(this.animate);
+    },
+
+    reset() {
+      this.character.root.position.set(0, 0, 0);
+      this.cameraController.currentX = 0;
+      this.track.reset();
+    },
+
+    checkCollisions(playerPos) {
+      const pX = playerPos.x;
+      const pY = playerPos.y;
+      const pZ = playerPos.z;
+
+      // 1. Obstacle Bounding Box Intersections
+      for (const obs of this.track.obstacles) {
+        const hb = obs.userData.hitBox;
+        if (!hb) continue;
+
+        const dz = Math.abs(obs.userData.z - pZ);
+        if (dz < hb.depth) {
+          const inX = pX >= hb.minX && pX <= hb.maxX;
+
+          if (inX) {
+            if (obs.userData.type === "SLIDE_UNDER") {
+              // Sliding lowers player hit height below clearance
+              if (!Engine.isSliding) {
+                this.cameraController.triggerShake(0.65);
+                Engine.triggerGameOver();
+                return;
+              }
+            } else if (obs.userData.type === "JUMP_OVER") {
+              // Must jump clear of the barrier height
+              if (pY < hb.maxY) {
+                this.cameraController.triggerShake(0.65);
+                Engine.triggerGameOver();
+                return;
+              }
+            }
+          }
+        }
+      }
+
+      // 2. Coin Magnet & Collection Intersections
+      for (const coin of this.track.coins) {
+        if (coin.userData.collected) continue;
+
+        const dz = Math.abs(coin.position.z - pZ);
+        const dx = Math.abs(coin.position.x - pX);
+        const dy = Math.abs(coin.position.y - pY);
+
+        if (dz < 1.1 && dx < 1.2 && dy < 1.8) {
+          coin.userData.collected = true;
+          Engine.coins++;
+          Engine.sound.playCoin();
+          document.getElementById("coinCounter").innerText = Engine.coins;
+        }
+      }
+    },
+
+    animate(now) {
+      requestAnimationFrame(this.animate);
+
+      const delta = Math.min((now - this.lastTime) / 1000, 0.1);
+      this.lastTime = now;
+
+      if (Engine.state === GAME_STATE.RUNNING) {
+        // Dynamic game progression: speed gradually scales with expedition distance
+        Engine.speed = Math.min(55, Engine.speed + delta * 0.22);
+        Engine.score += Engine.speed * delta;
+        document.getElementById("distCounter").innerText = Math.floor(Engine.score);
+
+        // Advance player along the Z-axis (endless forward progress)
+        this.character.root.position.z -= Engine.speed * delta;
+
+        // Move Sun directional light target along with player to maintain crisp shadows
+        this.sunLight.position.z = this.character.root.position.z + 18;
+        this.sunLight.target.position.z = this.character.root.position.z;
+        this.sunLight.target.updateMatrixWorld();
+
+        // Horizontal Lane Interpolation
+        this.character.root.position.x += (Engine.targetX - this.character.root.position.x) * 14 * delta;
+
+        // Jump Arc Kinematics
+        if (Engine.isJumping) {
+          this.character.root.position.y += Engine.jumpVelocity * delta;
+          Engine.jumpVelocity += Engine.gravity * delta;
+          if (this.character.root.position.y <= 0) {
+            this.character.root.position.y = 0;
+            Engine.isJumping = false;
+          }
+        }
+
+        // Slide State Expiration
+        if (Engine.isSliding) {
+          Engine.slideTimeRemaining -= delta;
+          if (Engine.slideTimeRemaining <= 0) {
+            Engine.isSliding = false;
+          }
+        }
+
+        // Procedural Footstep Audio Triggers
+        if (!Engine.isJumping && !Engine.isSliding) {
+          this.stepAccumulator += delta * (Engine.speed * 0.48);
+          if (this.stepAccumulator >= Math.PI) {
+            Engine.sound.playFootstep();
+            this.stepAccumulator -= Math.PI;
+          }
+        }
+
+        // Update Subsystems
+        this.track.update(this.character.root.position.z);
+        this.particles.update(delta, this.character.root.position.z);
+        this.character.update(delta, Engine.speed, Engine);
+        this.checkCollisions(this.character.root.position);
+      }
+
+      // Smooth Camera Tracking
+      this.cameraController.update(delta, this.character.root.position);
+
+      // Render Scene
+      this.renderer.render(this.scene, this.camera);
+    }
+  };
+
+  // Expose to engine for state resets
+  window.World = World;
+  window.addEventListener("DOMContentLoaded", () => World.init());
+  </script>
+</body>
+</html>
+
+/* =========================================================================
+     PART 6: MOBILE SWIPE CONTROLS, DUST TRAILS & SPEED VFX
+     ========================================================================= */
+
+  // 1. Dust & Footstep Debris Particle Emitter
+  class DebrisSystem {
+    constructor(scene) {
+      this.scene = scene;
+      this.maxParticles = 60;
+      this.particles = [];
+
+      const geo = new THREE.BufferGeometry();
+      this.positions = new Float32Array(this.maxParticles * 3);
+      this.opacities = new Float32Array(this.maxParticles);
+
+      geo.setAttribute("position", new THREE.BufferAttribute(this.positions, 3));
+      
+      this.mat = new THREE.PointsMaterial({
+        color: 0x9e8a78,
+        size: 0.18,
+        transparent: true,
+        opacity: 0.6,
+        blending: THREE.NormalBlending
+      });
+
+      this.mesh = new THREE.Points(geo, this.mat);
+      this.scene.add(this.mesh);
+
+      for (let i = 0; i < this.maxParticles; i++) {
+        this.particles.push({
+          x: 0, y: -10, z: 0,
+          vx: 0, vy: 0, vz: 0,
+          life: 0, maxLife: 0.4
+        });
+      }
+    }
+
+    emit(x, y, z) {
+      for (let i = 0; i < 3; i++) {
+        const p = this.particles.find(pt => pt.life <= 0);
+        if (!p) break;
+        p.x = x + (Math.random() - 0.5) * 0.3;
+        p.y = y + 0.05;
+        p.z = z + (Math.random() - 0.5) * 0.2;
+        p.vx = (Math.random() - 0.5) * 1.5;
+        p.vy = Math.random() * 1.2 + 0.5;
+        p.vz = Math.random() * 2.0 + 1.0;
+        p.life = p.maxLife;
+      }
+    }
+
+    update(delta) {
+      const pos = this.positions;
+      for (let i = 0; i < this.maxParticles; i++) {
+        const p = this.particles[i];
+        if (p.life > 0) {
+          p.life -= delta;
+          p.x += p.vx * delta;
+          p.y += p.vy * delta;
+          p.z += p.vz * delta;
+          p.vy -= 4.0 * delta; // Gravity on dirt flecks
+
+          pos[i * 3 + 0] = p.x;
+          pos[i * 3 + 1] = p.y;
+          pos[i * 3 + 2] = p.z;
+        } else {
+          pos[i * 3 + 1] = -100;
+        }
+      }
+      this.mesh.geometry.attributes.position.needsUpdate = true;
+    }
+  }
+
+  // 2. High-Speed Wind Tunnel Lines (Speed Sensation)
+  class SpeedStreakSystem {
+    constructor(scene) {
+      this.scene = scene;
+      this.count = 45;
+      const geo = new THREE.BufferGeometry();
+      const pos = new Float32Array(this.count * 6); // 2 vertices per line segment
+
+      for (let i = 0; i < this.count; i++) {
+        const x = (Math.random() - 0.5) * 12;
+        const y = Math.random() * 5 + 0.5;
+        const z = -Math.random() * 30;
+        const len = Math.random() * 2.5 + 1.5;
+
+        pos[i * 6 + 0] = x; pos[i * 6 + 1] = y; pos[i * 6 + 2] = z;
+        pos[i * 6 + 3] = x; pos[i * 6 + 4] = y; pos[i * 6 + 5] = z - len;
+      }
+
+      geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+      this.mat = new THREE.LineBasicMaterial({
+        color: 0xcccccc,
+        transparent: true,
+        opacity: 0.25
+      });
+
+      this.lines = new THREE.LineSegments(geo, this.mat);
+      this.scene.add(this.lines);
+    }
+
+    update(playerZ, speed) {
+      // Scale streak visibility with current player velocity
+      this.mat.opacity = Math.min(0.55, (speed - 28) / 45);
+
+      const pos = this.lines.geometry.attributes.position.array;
+      for (let i = 0; i < this.count; i++) {
+        if (pos[i * 6 + 2] > playerZ + 5) {
+          const x = (Math.random() - 0.5) * 10;
+          const y = Math.random() * 5 + 0.5;
+          const z = playerZ - 25 - Math.random() * 25;
+          const len = 2.0 + (speed / 15);
+
+          pos[i * 6 + 0] = x; pos[i * 6 + 1] = y; pos[i * 6 + 2] = z;
+          pos[i * 6 + 3] = x; pos[i * 6 + 4] = y; pos[i * 6 + 5] = z - len;
+        }
+      }
+      this.lines.geometry.attributes.position.needsUpdate = true;
+    }
+  }
+
+  // 3. Touch / Swipe Controller for Mobile Devices
+  function setupTouchControls() {
+    let touchStartX = 0;
+    let touchStartY = 0;
+    const minSwipeDist = 35;
+
+    window.addEventListener("touchstart", (e) => {
+      touchStartX = e.changedTouches[0].screenX;
+      touchStartY = e.changedTouches[0].screenY;
+    }, { passive: true });
+
+    window.addEventListener("touchend", (e) => {
+      if (Engine.state !== GAME_STATE.RUNNING) return;
+
+      const diffX = e.changedTouches[0].screenX - touchStartX;
+      const diffY = e.changedTouches[0].screenY - touchStartY;
+
+      if (Math.abs(diffX) > Math.abs(diffY)) {
+        // Horizontal Swipes
+        if (diffX > minSwipeDist && Engine.currentLane < 2) {
+          Engine.currentLane++;
+          Engine.targetX = (Engine.currentLane - 1) * Engine.laneWidth;
+        } else if (diffX < -minSwipeDist && Engine.currentLane > 0) {
+          Engine.currentLane--;
+          Engine.targetX = (Engine.currentLane - 1) * Engine.laneWidth;
+        }
+      } else {
+        // Vertical Swipes
+        if (diffY < -minSwipeDist && !Engine.isJumping && !Engine.isSliding) {
+          Engine.isJumping = true;
+          Engine.jumpVelocity = 17.5;
+          Engine.sound.playJump();
+        } else if (diffY > minSwipeDist && !Engine.isSliding) {
+          Engine.isSliding = true;
+          Engine.slideTimeRemaining = 0.65;
+          Engine.sound.playSlide();
+          if (Engine.isJumping) Engine.jumpVelocity = -22;
+        }
+      }
+    }, { passive: true });
+  }
+
+  // 4. Hook Systems into World Lifecycle
+  const originalWorldInit = World.init;
+  World.init = function() {
+    originalWorldInit.call(this);
+
+    this.debris = new DebrisSystem(this.scene);
+    this.speedStreaks = new SpeedStreakSystem(this.scene);
+    setupTouchControls();
+
+    // Hook debris spawner onto running footstep timing
+    const originalAnimate = this.animate;
+    this.animate = (now) => {
+      if (Engine.state === GAME_STATE.RUNNING) {
+        this.debris.update(Math.min((now - this.lastTime) / 1000, 0.1));
+        this.speedStreaks.update(this.character.root.position.z, Engine.speed);
+
+        if (!Engine.isJumping && !Engine.isSliding) {
+          const feetY = this.character.root.position.y;
+          this.debris.emit(
+            this.character.root.position.x,
+            feetY,
+            this.character.root.position.z
+          );
+        }
+      }
+      originalAnimate.call(this, now);
+    };
+  };
