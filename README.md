@@ -43,8 +43,9 @@ Every game runs entirely client-side with **zero dependencies, build steps, or i
 Clone the repository:
 
 ```bash
-git clone https://github.com/nexus-being-787/Arcade-Hub.git
-cd Arcade-Hub
+git clone https://github.com/nexus-being-787/Click-2-Play.git
+cd Click-2-Play
+
 ```
 
 Open any game directly in your preferred browser:
@@ -72,6 +73,7 @@ You can also open `index.html` to launch the main Arcade Hub interface.
 ---
 
 ### 🌐 Optional: Local Development Server
+**Only for react**
 
 For development or testing through a local HTTP server:
 
