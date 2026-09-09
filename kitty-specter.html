@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Cyber Kitty: Stealth Infiltration</title>
+  <style>
+    :root {
+      --bg: #0b0e14;
+      --cyan: #00f3ff;
+      --magenta: #ff0055;
+      --amber: #ffaa00;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body {
+      background: var(--bg);
+      overflow: hidden;
+      font-family: 'Courier New', Courier, monospace;
+      color: white;
+    }
+    #gameCanvas {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      z-index: 1;
+    }
+    #ui-layer {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      z-index: 10;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 24px;
+    }
+    .hud-top {
+      display: flex;
+      justify-content: space-between;
+      text-transform: uppercase;
+      font-weight: 900;
+      letter-spacing: 3px;
+      text-shadow: 0 0 10px var(--cyan);
+    }
+    .status-alert { 
+      color: var(--magenta); 
+      text-shadow: 0 0 12px var(--magenta); 
+      opacity: 0; 
+      transition: opacity 0.15s; 
+    }
+    .screen {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: radial-gradient(circle at center, rgba(11, 16, 26, 0.88) 0%, rgba(5, 7, 12, 0.98) 100%);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 20;
+      pointer-events: auto;
+      text-align: center;
+      padding: 20px;
+    }
+    .hidden { display: none !important; }
+    h1 {
+      font-size: clamp(2.2rem, 5vw, 3.8rem);
+      color: var(--cyan);
+      text-shadow: 0 0 24px var(--cyan), 2px 2px 0px var(--magenta);
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 6px;
+    }
+    p { color: #8899aa; margin-bottom: 30px; letter-spacing: 1px; max-width: 480px; line-height: 1.5; }
+    .btn {
+      padding: 16px 44px;
+      background: transparent;
+      color: var(--cyan);
+      border: 2px solid var(--cyan);
+      font-size: 1.1rem;
+      font-weight: 800;
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      box-shadow: 0 0 20px rgba(0, 243, 255, 0.25), inset 0 0 15px rgba(0, 243, 255, 0.1);
+      transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .btn:hover { background: var(--cyan); color: #050508; box-shadow: 0 0 35px rgba(0, 243, 255, 0.7); transform: scale(1.04); }
+    .btn:active { transform: scale(0.96); }
+    
+    #joystick-zone {
+      position: absolute; bottom: 8%; left: 8%;
+      width: 120px; height: 120px;
+      background: rgba(0, 243, 255, 0.05);
+      border: 2px solid rgba(0, 243, 255, 0.2);
+      border-radius: 50%;
+      display: none;
+      pointer-events: auto;
+    }
+    #joystick-knob {
+      position: absolute; top: 50%; left: 50%;
+      width: 44px; height: 44px;
+      background: rgba(0, 243, 255, 0.6);
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 12px var(--cyan);
+    }
+    @media (pointer: coarse) { #joystick-zone { display: block; } }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+  <div id="ui-layer">
+    <div class="hud-top">
+      <div id="floor-display">Sector 01</div>
+      <div id="targets-display" style="color:var(--amber); text-shadow: 0 0 8px var(--amber);">Hostiles: 3</div>
+      <div id="alert-display" class="status-alert">KITTY COMPROMISED</div>
+    </div>
+  </div>
+
+  <div id="joystick-zone"><div id="joystick-knob"></div></div>
+
+  <div id="start-screen" class="screen">
+    <h1>CYBER KITTY</h1>
+    <p>Operate in the shadows. Hide behind walls to block guard view lines. Pounce from behind to eliminate security!</p>
+    <button class="btn" id="btn-start">Deploy Paws</button>
+  </div>
+
+  <div id="game-over-screen" class="screen hidden">
+    <h1 style="color: var(--magenta); text-shadow: 0 0 24px var(--magenta);">Captured</h1>
+    <p id="death-reason">Guards tagged the rogue operative.</p>
+    <button class="btn" style="border-color: var(--magenta); color: var(--magenta);" id="btn-restart">Retry</button>
+  </div>
+
+  <div id="victory-screen" class="screen hidden">
+    <h1 style="color: var(--cyan);">Vault Infiltrated</h1>
+    <p>Hostiles eliminated. Stepping into ventilation conduit...</p>
+    <button class="btn" id="btn-next">Next Floor</button>
+  </div>
+
+  <canvas id="gameCanvas"></canvas>
+
+  <script>
+  class SoundFX {
+    constructor() { this.ctx = null; }
+    init() {
+      if (!this.ctx) {
+        this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+    }
+    pounce() {
+      if (!this.ctx) return;
+      const t = this.ctx.currentTime;
+      // Cat hiss / laser swipe
+      const bSize = this.ctx.sampleRate * 0.1;
+      const b = this.ctx.createBuffer(1, bSize, this.ctx.sampleRate);
+      const data = b.getChannelData(0);
+      for (let i = 0; i < bSize; i++) data[i] = Math.random() * 2 - 1;
+      const noise = this.ctx.createBufferSource();
+      noise.buffer = b;
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = "bandpass";
+      filter.frequency.setValueAtTime(3200, t);
+      const gain = this.ctx.createGain();
+      gain.gain.setValueAtTime(0.25, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+      noise.connect(filter); filter.connect(gain); gain.connect(this.ctx.destination);
+      noise.start(t);
+
+      // Heavy punch impact
+      const osc = this.ctx.createOscillator();
+      const oGain = this.ctx.createGain();
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(160, t);
+      osc.frequency.exponentialRampToValueAtTime(30, t + 0.35);
+      oGain.gain.setValueAtTime(0.4, t);
+      oGain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+      osc.connect(oGain); oGain.connect(this.ctx.destination);
+      osc.start(t); osc.stop(t + 0.35);
+    }
+    alarm() {
+      if (!this.ctx) return;
+      const t = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(750, t);
+      osc.frequency.setValueAtTime(950, t + 0.15);
+      gain.gain.setValueAtTime(0.2, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+      osc.connect(gain); gain.connect(this.ctx.destination);
+      osc.start(t); osc.stop(t + 0.3);
+    }
+    portal() {
+      if (!this.ctx) return;
+      const t = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(260, t);
+      osc.frequency.exponentialRampToValueAtTime(880, t + 0.4);
+      gain.gain.setValueAtTime(0.2, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+      osc.connect(gain); gain.connect(this.ctx.destination);
+      osc.start(t); osc.stop(t + 0.4);
+    }
+  }
+
+  const sfx = new SoundFX();
+
+  const GAME = {
+    state: 'MENU',
+    level: 1,
+    timeScale: 1.0,
+    keys: { w: false, a: false, s: false, d: false }
+  };
+
+  class CameraRig {
+    constructor(camera) {
+      this.camera = camera;
+      this.offset = new THREE.Vector3(12, 19, 12);
+      this.currentPos = new THREE.Vector3();
+      this.trauma = 0;
+    }
+    addTrauma(amount) {
+      this.trauma = Math.min(this.trauma + amount, 1.0);
+    }
+    update(delta, targetPos) {
+      const desired = targetPos.clone().add(this.offset);
+      this.currentPos.lerp(desired, 6.0 * delta);
+
+      let sX = 0, sY = 0, sZ = 0, rZ = 0;
+      if (this.trauma > 0) {
+        const p = this.trauma * this.trauma;
+        sX = (Math.random() - 0.5) * 2.8 * p;
+        sY = (Math.random() - 0.5) * 2.8 * p;
+        sZ = (Math.random() - 0.5) * 2.8 * p;
+        rZ = (Math.random() - 0.5) * 0.09 * p;
+        this.trauma = Math.max(0, this.trauma - delta * 1.8);
+      }
+
+      this.camera.position.set(this.currentPos.x + sX, this.currentPos.y + sY, this.currentPos.z + sZ);
+      this.camera.lookAt(targetPos);
+      this.camera.rotateZ(rZ);
+    }
+  }
+
+  /* =========================================================================
+     CYBER-KITTY HERO MODEL & ANIMATION
+     ========================================================================= */
+  class CyberKitty {
+    constructor(scene) {
+      this.scene = scene;
+      this.radius = 0.55;
+      this.speed = 13.5;
+      this.mesh = new THREE.Group();
+      this.walkCycle = 0;
+
+      const furMat = new THREE.MeshStandardMaterial({ 
+        color: 0x181e28, 
+        roughness: 0.5, 
+        metalness: 0.4 
+      });
+      const cyanMat = new THREE.MeshBasicMaterial({ color: 0x00f3ff });
+
+      // Torso / Body
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.55, 1.2), furMat);
+      body.position.y = 0.5;
+      body.castShadow = true;
+      this.body = body;
+      this.mesh.add(body);
+
+      // Head
+      const head = new THREE.Group();
+      head.position.set(0, 0.75, 0.65);
+      const skull = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.45, 0.5), furMat);
+      head.add(skull);
+
+      // Pointy Ears
+      const earGeo = new THREE.ConeGeometry(0.12, 0.28, 4);
+      const leftEar = new THREE.Mesh(earGeo, furMat);
+      leftEar.position.set(-0.2, 0.32, 0);
+      leftEar.rotation.z = 0.2;
+      const rightEar = leftEar.clone();
+      rightEar.position.x = 0.2;
+      rightEar.rotation.z = -0.2;
+      head.add(leftEar, rightEar);
+
+      // Cyber Visor / Eyes
+      const visor = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.14, 0.1), cyanMat);
+      visor.position.set(0, 0.05, 0.26);
+      head.add(visor);
+      this.mesh.add(head);
+
+      // Paws (Front left, Front right, Back left, Back right)
+      this.paws = [];
+      const pawGeo = new THREE.BoxGeometry(0.18, 0.35, 0.22);
+      const pawPositions = [
+        [-0.24, 0.18, 0.4],  // FL
+        [0.24, 0.18, 0.4],   // FR
+        [-0.24, 0.18, -0.4], // BL
+        [0.24, 0.18, -0.4]   // BR
+      ];
+      pawPositions.forEach(([px, py, pz]) => {
+        const paw = new THREE.Mesh(pawGeo, furMat);
+        paw.position.set(px, py, pz);
+        paw.castShadow = true;
+        this.mesh.add(paw);
+        this.paws.push(paw);
+      });
+
+      // Animated Tail
+      this.tail = new THREE.Group();
+      this.tail.position.set(0, 0.65, -0.6);
+      const tailSegment = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.7, 8), cyanMat);
+      tailSegment.position.set(0, 0.25, -0.2);
+      tailSegment.rotation.x = -Math.PI / 4;
+      this.tail.add(tailSegment);
+      this.mesh.add(this.tail);
+
+      // Subtle underglow point light
+      this.light = new THREE.PointLight(0x00f3ff, 2.2, 7);
+      this.light.position.y = 0.8;
+      this.mesh.add(this.light);
+
+      this.scene.add(this.mesh);
+    }
+
+    update(delta, inputVec, walls) {
+      if (GAME.state !== 'PLAYING') return;
+
+      const isMoving = inputVec.lengthSq() > 0.01;
+
+      if (isMoving) {
+        inputVec.normalize();
+        const moveStep = inputVec.clone().multiplyScalar(this.speed * delta);
+
+        const nextX = this.mesh.position.x + moveStep.x;
+        if (!this.checkWallCollision(nextX, this.mesh.position.z, walls)) {
+          this.mesh.position.x = nextX;
+        }
+        const nextZ = this.mesh.position.z + moveStep.z;
+        if (!this.checkWallCollision(this.mesh.position.x, nextZ, walls)) {
+          this.mesh.position.z = nextZ;
+        }
+
+        const targetAngle = Math.atan2(inputVec.x, inputVec.z);
+        let diff = targetAngle - this.mesh.rotation.y;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        this.mesh.rotation.y += diff * 18 * delta;
+
+        // Trot walk cycle animation
+        this.walkCycle += delta * 22;
+        this.paws[0].position.y = 0.18 + Math.sin(this.walkCycle) * 0.12;
+        this.paws[3].position.y = 0.18 + Math.sin(this.walkCycle) * 0.12;
+        this.paws[1].position.y = 0.18 - Math.sin(this.walkCycle) * 0.12;
+        this.paws[2].position.y = 0.18 - Math.sin(this.walkCycle) * 0.12;
+
+        this.body.position.y = 0.5 + Math.abs(Math.sin(this.walkCycle)) * 0.06;
+      } else {
+        this.paws.forEach(p => p.position.y += (0.18 - p.position.y) * 12 * delta);
+        this.body.position.y += (0.5 - this.body.position.y) * 12 * delta;
+      }
+
+      // Continuous tail swish
+      this.tail.rotation.y = Math.sin(performance.now() * 0.006) * 0.45;
+    }
+
+    checkWallCollision(x, z, walls) {
+      for (const w of walls) {
+        const nearestX = Math.max(w.min.x, Math.min(x, w.max.x));
+        const nearestZ = Math.max(w.min.z, Math.min(z, w.max.z));
+        const dx = x - nearestX;
+        const dz = z - nearestZ;
+        if ((dx * dx + dz * dz) < (this.radius * this.radius)) return true;
+      }
+      return false;
+    }
+  }
+
+  /* =========================================================================
+     GUARD AI WITH DYNAMIC RAYCAST FOV SCANNING (Occludes around walls)
+     ========================================================================= */
+  class Guard {
+    constructor(scene, x, z, waypoints) {
+      this.scene = scene;
+      this.speed = 3.8;
+      this.waypoints = waypoints;
+      this.curWaypoint = 0;
+      this.isDead = false;
+
+      this.mesh = new THREE.Group();
+      this.mesh.position.set(x, 0, z);
+
+      const body = new THREE.Mesh(
+        new THREE.BoxGeometry(1.2, 2.1, 1.2),
+        new THREE.MeshStandardMaterial({ color: 0xff0044, roughness: 0.3, emissive: 0x440011 })
+      );
+      body.position.y = 1.05;
+      body.castShadow = true;
+      this.mesh.add(body);
+
+      this.guardLight = new THREE.PointLight(0xff0044, 1.5, 6);
+      this.guardLight.position.y = 2.2;
+      this.mesh.add(this.guardLight);
+
+      // Vision parameters
+      this.maxDist = 9.0;
+      this.fov = Math.PI / 3; // 60 degrees
+      this.rayCount = 36;    // Number of rays generating dynamic mesh contour
+
+      // Dynamic custom geometry for vision cone
+      this.coneGeo = new THREE.BufferGeometry();
+      this.coneMat = new THREE.MeshBasicMaterial({
+        color: 0xff0044,
+        transparent: true,
+        opacity: 0.28,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+      });
+      this.fovMesh = new THREE.Mesh(this.coneGeo, this.coneMat);
+      this.fovMesh.position.y = 0.25;
+      this.scene.add(this.fovMesh);
+
+      this.visionSweep = 0;
+      this.scene.add(this.mesh);
+
+      this.raycaster = new THREE.Raycaster();
+    }
+
+    update(delta, player, wallMeshes) {
+      if (this.isDead || GAME.state !== 'PLAYING') return;
+
+      if (this.waypoints.length > 0) {
+        const target = this.waypoints[this.curWaypoint];
+        const dir = new THREE.Vector3().subVectors(target, this.mesh.position);
+        dir.y = 0;
+        if (dir.length() < 0.4) {
+          this.curWaypoint = (this.curWaypoint + 1) % this.waypoints.length;
+        } else {
+          dir.normalize();
+          this.mesh.position.addScaledVector(dir, this.speed * delta);
+          const targetAngle = Math.atan2(dir.x, dir.z);
+          let diff = targetAngle - this.mesh.rotation.y;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          while (diff > Math.PI) diff -= Math.PI * 2;
+          this.mesh.rotation.y += diff * 6 * delta;
+        }
+      }
+
+      this.visionSweep = Math.sin(performance.now() * 0.0024) * 0.65;
+      this.renderDynamicFOV(wallMeshes, player);
+    }
+
+    renderDynamicFOV(wallMeshes, player) {
+      const baseAngle = this.mesh.rotation.y + this.visionSweep;
+      const startAngle = baseAngle - (this.fov / 2);
+      const angleStep = this.fov / (this.rayCount - 1);
+
+      const centerOrigin = this.mesh.position.clone().add(new THREE.Vector3(0, 0.4, 0));
+      const vertices = [];
+      const originX = centerOrigin.x;
+      const originZ = centerOrigin.z;
+
+      for (let i = 0; i < this.rayCount; i++) {
+        const currentAngle = startAngle + (i * angleStep);
+        const dir = new THREE.Vector3(Math.sin(currentAngle), 0, Math.cos(currentAngle)).normalize();
+
+        this.raycaster.set(centerOrigin, dir);
+        this.raycaster.near = 0.2;
+        this.raycaster.far = this.maxDist;
+
+        const hits = this.raycaster.intersectObjects(wallMeshes, false);
+        const castDist = hits.length > 0 ? hits[0].distance : this.maxDist;
+
+        vertices.push(originX + dir.x * castDist, 0.25, originZ + dir.z * castDist);
+      }
+
+      // Build triangle fan mesh (origin to rim vertices)
+      const positions = [];
+      for (let i = 0; i < this.rayCount - 1; i++) {
+        // Point 0: Origin
+        positions.push(originX, 0.25, originZ);
+        // Point 1: Vertex i
+        positions.push(vertices[i * 3], vertices[i * 3 + 1], vertices[i * 3 + 2]);
+        // Point 2: Vertex i + 1
+        positions.push(vertices[(i + 1) * 3], vertices[(i + 1) * 3 + 1], vertices[(i + 1) * 3 + 2]);
+      }
+
+      this.coneGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      this.coneGeo.computeVertexNormals();
+
+      // Check player detection against actual unblocked vision lines
+      const toKitty = new THREE.Vector3().subVectors(player.mesh.position, this.mesh.position);
+      toKitty.y = 0;
+      const distToKitty = toKitty.length();
+
+      if (distToKitty < this.maxDist + player.radius) {
+        toKitty.normalize();
+        const fwd = new THREE.Vector3(Math.sin(baseAngle), 0, Math.cos(baseAngle));
+        const angle = Math.acos(Math.min(1, Math.max(-1, fwd.dot(toKitty))));
+
+        if (angle < this.fov / 2) {
+          const rayOrigin = this.mesh.position.clone().add(new THREE.Vector3(0, 0.5, 0));
+          const rayDir = player.mesh.position.clone().add(new THREE.Vector3(0, 0.5, 0)).sub(rayOrigin).normalize();
+          this.raycaster.set(rayOrigin, rayDir);
+          this.raycaster.far = distToKitty;
+
+          const occlusions = this.raycaster.intersectObjects(wallMeshes, false);
+          if (occlusions.length === 0) {
+            triggerGameOver("Kitty was spotted by surveillance operatives!");
+          }
+        }
+      }
+    }
+
+    die() {
+      this.isDead = true;
+      this.scene.remove(this.mesh);
+      this.scene.remove(this.fovMesh);
+    }
+  }
+
+  /* =========================================================================
+     LASER FIELDS, EFFECTS & WORLD
+     ========================================================================= */
+  class LaserGrid {
+    constructor(scene, p1, p2, moveAxis = null, range = 0) {
+      this.scene = scene;
+      this.p1 = p1;
+      this.p2 = p2;
+      this.moveAxis = moveAxis;
+      this.range = range;
+      this.baseP1 = p1.clone();
+      this.baseP2 = p2.clone();
+
+      const geo = new THREE.BufferGeometry().setFromPoints([p1, p2]);
+      const mat = new THREE.LineBasicMaterial({ color: 0xff0055, linewidth: 3 });
+      this.line = new THREE.Line(geo, mat);
+
+      const glowMat = new THREE.LineBasicMaterial({ color: 0xff4488, transparent: true, opacity: 0.6 });
+      this.glow = new THREE.Line(geo, glowMat);
+      this.glow.scale.set(1.02, 1.5, 1.02);
+
+      this.group = new THREE.Group();
+      this.group.add(this.line);
+      this.group.add(this.glow);
+      this.scene.add(this.group);
+    }
+
+    update(delta, playerPos) {
+      if (this.moveAxis) {
+        const offset = Math.sin(performance.now() * 0.002) * this.range;
+        if (this.moveAxis === 'x') {
+          this.p1.x = this.baseP1.x + offset;
+          this.p2.x = this.baseP2.x + offset;
+        } else if (this.moveAxis === 'z') {
+          this.p1.z = this.baseP1.z + offset;
+          this.p2.z = this.baseP2.z + offset;
+        }
+        this.line.geometry.setFromPoints([this.p1, this.p2]);
+        this.glow.geometry.setFromPoints([this.p1, this.p2]);
+      }
+
+      const dist = this.distToSegment(playerPos, this.p1, this.p2);
+      if (dist < 0.65) {
+        triggerGameOver("Kitty touched localized high-frequency laser fence!");
+      }
+    }
+
+    distToSegment(p, a, b) {
+      const l2 = (b.x - a.x) ** 2 + (b.z - a.z) ** 2;
+      if (l2 === 0) return Math.hypot(p.x - a.x, p.z - a.z);
+      let t = ((p.x - a.x) * (b.x - a.x) + (p.z - a.z) * (b.z - a.z)) / l2;
+      t = Math.max(0, Math.min(1, t));
+      return Math.hypot(p.x - (a.x + t * (b.x - a.x)), p.z - (a.z + t * (b.z - a.z)));
+    }
+
+    destroy() { this.scene.remove(this.group); }
+  }
+
+  class FXEngine {
+    constructor(scene) {
+      this.scene = scene;
+      this.particles = [];
+      this.boxGeo = new THREE.BoxGeometry(0.24, 0.24, 0.24);
+      this.mat = new THREE.MeshBasicMaterial({ color: 0xff0044 });
+    }
+
+    killBurst(pos) {
+      for (let i = 0; i < 24; i++) {
+        const p = new THREE.Mesh(this.boxGeo, this.mat);
+        p.position.copy(pos);
+        p.position.y += 1.0;
+        p.userData = {
+          vx: (Math.random() - 0.5) * 18,
+          vy: Math.random() * 12 + 4,
+          vz: (Math.random() - 0.5) * 18,
+          life: 1.0
+        };
+        this.scene.add(p);
+        this.particles.push(p);
+      }
+    }
+
+    pounceRibbon(start, end) {
+      const geom = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(start.x, 0.6, start.z),
+        new THREE.Vector3(end.x, 0.6, end.z)
+      ]);
+      const mat = new THREE.LineBasicMaterial({ color: 0x00f3ff, transparent: true, opacity: 1 });
+      const line = new THREE.Line(geom, mat);
+      this.scene.add(line);
+      const startTime = performance.now();
+
+      const fade = () => {
+        const elapsed = (performance.now() - startTime) / 1000;
+        if (elapsed < 0.2) {
+          line.material.opacity = 1 - (elapsed / 0.2);
+          requestAnimationFrame(fade);
+        } else {
+          this.scene.remove(line);
+        }
+      };
+      fade();
+    }
+
+    update(delta) {
+      for (let i = this.particles.length - 1; i >= 0; i--) {
+        const p = this.particles[i];
+        p.userData.life -= delta * 1.8;
+        if (p.userData.life <= 0) {
+          this.scene.remove(p);
+          this.particles.splice(i, 1);
+          continue;
+        }
+        p.userData.vy -= 36 * delta;
+        p.position.x += p.userData.vx * delta;
+        p.position.y += p.userData.vy * delta;
+        p.position.z += p.userData.vz * delta;
+        p.scale.setScalar(p.userData.life);
+      }
+    }
+  }
+
+  class LevelWorld {
+    constructor(scene) {
+      this.scene = scene;
+      this.wallMeshes = [];
+      this.wallBoxes = [];
+      this.initStaticEnvironment();
+    }
+
+    initStaticEnvironment() {
+      const floor = new THREE.Mesh(
+        new THREE.PlaneGeometry(120, 120),
+        new THREE.MeshStandardMaterial({ 
+          color: 0x121824, 
+          roughness: 0.5, 
+          metalness: 0.2 
+        })
+      );
+      floor.rotation.x = -Math.PI / 2;
+      floor.receiveShadow = true;
+      this.scene.add(floor);
+
+      const grid = new THREE.GridHelper(120, 60, 0x00f3ff, 0x1e2b40);
+      grid.position.y = 0.02;
+      grid.material.opacity = 0.45;
+      grid.material.transparent = true;
+      this.scene.add(grid);
+    }
+
+    addWall(x, z, w, d) {
+      const h = 4.2;
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(w, h, d),
+        new THREE.MeshStandardMaterial({ 
+          color: 0x1a2130, 
+          roughness: 0.6, 
+          metalness: 0.4 
+        })
+      );
+      mesh.position.set(x, h / 2, z);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+
+      const wf = new THREE.LineSegments(
+        new THREE.EdgesGeometry(mesh.geometry),
+        new THREE.LineBasicMaterial({ color: 0x00f3ff, transparent: true, opacity: 0.6 })
+      );
+      mesh.add(wf);
+
+      this.scene.add(mesh);
+      this.wallMeshes.push(mesh);
+      this.wallBoxes.push(new THREE.Box2(
+        new THREE.Vector2(x - w / 2, z - d / 2),
+        new THREE.Vector2(x + w / 2, z + d / 2)
+      ));
+    }
+
+    buildFacility() {
+      this.addWall(0, -30, 60, 2);
+      this.addWall(0, 30, 60, 2);
+      this.addWall(-30, 0, 2, 60);
+      this.addWall(30, 0, 2, 60);
+
+      this.addWall(-10, -12, 16, 2);
+      this.addWall(12, -8, 2, 22);
+      this.addWall(-8, 12, 2, 20);
+      this.addWall(10, 14, 18, 2);
+      this.addWall(0, 0, 6, 6);
+    }
+  }
+
+  /* =========================================================================
+     CORE ORCHESTRATION LOOP
+     ========================================================================= */
+  let scene, camera, renderer, rig, kitty, fx, world;
+  let guards = [], lasers = [];
+  let exitPortal = null;
+  let lastTime = 0;
+
+  function init() {
+    const canvas = document.getElementById('gameCanvas');
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0a0f18);
+    scene.fog = new THREE.Fog(0x0a0f18, 25, 90);
+
+    camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+    rig = new CameraRig(camera);
+
+    const amb = new THREE.AmbientLight(0x405570, 1.4);
+    scene.add(amb);
+
+    const dir = new THREE.DirectionalLight(0xaad8ff, 1.6);
+    dir.position.set(-20, 35, 20);
+    dir.castShadow = true;
+    dir.shadow.mapSize.width = 1024;
+    dir.shadow.mapSize.height = 1024;
+    scene.add(dir);
+
+    world = new LevelWorld(scene);
+    world.buildFacility();
+
+    kitty = new CyberKitty(scene);
+    fx = new FXEngine(scene);
+
+    const portalGeo = new THREE.CylinderGeometry(2.0, 2.2, 0.2, 32);
+    const portalMat = new THREE.MeshStandardMaterial({ color: 0x223040, roughness: 0.3 });
+    exitPortal = new THREE.Mesh(portalGeo, portalMat);
+    exitPortal.position.set(22, 0.1, 22);
+
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(1.6, 2.0, 32),
+      new THREE.MeshBasicMaterial({ color: 0x00f3ff, side: THREE.DoubleSide })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.12;
+    exitPortal.add(ring);
+    scene.add(exitPortal);
+
+    setupLevelData();
+    setupInputs();
+
+    requestAnimationFrame(renderLoop);
+  }
+
+  function setupLevelData() {
+    guards.forEach(g => g.die());
+    guards = [];
+    lasers.forEach(l => l.destroy());
+    lasers = [];
+
+    kitty.mesh.position.set(-22, 0, -22);
+
+    guards.push(new Guard(scene, -12, 0, [
+      new THREE.Vector3(-12, 0, -8),
+      new THREE.Vector3(-12, 0, 8)
+    ]));
+    guards.push(new Guard(scene, 5, -18, [
+      new THREE.Vector3(-4, 0, -18),
+      new THREE.Vector3(8, 0, -18)
+    ]));
+    guards.push(new Guard(scene, 18, 5, [
+      new THREE.Vector3(18, 0, -2),
+      new THREE.Vector3(18, 0, 18)
+    ]));
+
+    lasers.push(new LaserGrid(scene, new THREE.Vector3(-6, 0.5, -2), new THREE.Vector3(6, 0.5, -2), 'z', 6));
+    lasers.push(new LaserGrid(scene, new THREE.Vector3(0, 0.5, 6), new THREE.Vector3(0, 0.5, 20), 'x', 5));
+
+    updateHUD();
+  }
+
+  function updateHUD() {
+    document.getElementById('targets-display').innerText = `Hostiles: ${guards.filter(g => !g.isDead).length}`;
+    document.getElementById('floor-display').innerText = `Sector 0${GAME.level}`;
+  }
+
+  function triggerGameOver(reason) {
+    if (GAME.state !== 'PLAYING') return;
+    GAME.state = 'KILLED';
+    sfx.alarm();
+    document.getElementById('alert-display').style.opacity = 1;
+    document.getElementById('death-reason').innerText = reason;
+    setTimeout(() => {
+      document.getElementById('game-over-screen').classList.remove('hidden');
+    }, 600);
+  }
+
+  function checkAssassinations() {
+    const killDist = 2.8;
+    for (let i = guards.length - 1; i >= 0; i--) {
+      const g = guards[i];
+      if (g.isDead) continue;
+
+      if (kitty.mesh.position.distanceTo(g.mesh.position) < killDist) {
+        const startPos = kitty.mesh.position.clone();
+        kitty.mesh.position.copy(g.mesh.position);
+
+        fx.pounceRibbon(startPos, kitty.mesh.position);
+        fx.killBurst(kitty.mesh.position);
+
+        g.die();
+        sfx.pounce();
+
+        GAME.timeScale = 0.04;
+        rig.addTrauma(1.0);
+        updateHUD();
+      }
+    }
+
+    const remaining = guards.filter(g => !g.isDead).length;
+    if (remaining === 0) {
+      exitPortal.children[0].material.color.setHex(0x00ff88);
+      if (kitty.mesh.position.distanceTo(exitPortal.position) < 2.0) {
+        sfx.portal();
+        GAME.state = 'CLEAR';
+        document.getElementById('victory-screen').classList.remove('hidden');
+      }
+    }
+  }
+
+  function renderLoop(now) {
+    requestAnimationFrame(renderLoop);
+    let rawDelta = Math.min((now - lastTime) / 1000, 0.1);
+    lastTime = now;
+
+    GAME.timeScale += (1.0 - GAME.timeScale) * 5.0 * rawDelta;
+    const delta = rawDelta * GAME.timeScale;
+
+    if (GAME.state === 'PLAYING') {
+      let moveDir = Input.getVector();
+      kitty.update(delta, moveDir, world.wallBoxes);
+
+      guards.forEach(g => g.update(delta, kitty, world.wallMeshes));
+      lasers.forEach(l => l.update(delta, kitty.mesh.position));
+      checkAssassinations();
+    }
+
+    fx.update(rawDelta);
+    rig.update(rawDelta, kitty.mesh.position);
+    renderer.render(scene, camera);
+  }
+
+  const Input = {
+    getVector() {
+      const v = new THREE.Vector3();
+      if (GAME.keys.w) v.z -= 1;
+      if (GAME.keys.s) v.z += 1;
+      if (GAME.keys.a) v.x -= 1;
+      if (GAME.keys.d) v.x += 1;
+      if (v.lengthSq() > 0) {
+        v.applyAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 4);
+      }
+      return v;
+    }
+  };
+
+  function setupInputs() {
+    window.addEventListener('keydown', (e) => {
+      const k = e.key.toLowerCase();
+      if (GAME.keys.hasOwnProperty(k)) GAME.keys[k] = true;
+    });
+    window.addEventListener('keyup', (e) => {
+      const k = e.key.toLowerCase();
+      if (GAME.keys.hasOwnProperty(k)) GAME.keys[k] = false;
+    });
+
+    document.getElementById('btn-start').onclick = () => {
+      sfx.init();
+      document.getElementById('start-screen').classList.add('hidden');
+      GAME.state = 'PLAYING';
+      lastTime = performance.now();
+    };
+
+    document.getElementById('btn-restart').onclick = () => {
+      document.getElementById('game-over-screen').classList.add('hidden');
+      document.getElementById('alert-display').style.opacity = 0;
+      setupLevelData();
+      GAME.state = 'PLAYING';
+    };
+
+    document.getElementById('btn-next').onclick = () => {
+      document.getElementById('victory-screen').classList.add('hidden');
+      GAME.level++;
+      setupLevelData();
+      GAME.state = 'PLAYING';
+    };
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  }
+
+  window.onload = init;
+  </script>
+</body>
+</html>
